@@ -72,6 +72,7 @@ def predict_fn(input_data, model):
 
     data_X = None
     data_len = None
+    data_X, data_len = convert_and_pad(model.word_dict, review_to_words(input_data))
 
     # Using data_X and data_len we construct an appropriate input tensor. Remember
     # that our model expects input data of the form 'len, review[500]'.
@@ -88,5 +89,10 @@ def predict_fn(input_data, model):
     #       be a numpy array which contains a single integer which is either 1 or 0
 
     result = None
+    np_result = model(data).detach().numpy()
+    print('Result is {} and its type is {}'.format(np_result, type(np_result)))
+
+    int_result = int(np.round(np_result))
+    result = np.array(int_result)
 
     return result
