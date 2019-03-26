@@ -1,32 +1,35 @@
 import torch.nn as nn
 
-class LSTMClassifier(nn.Module):
-    """
-    This is the simple RNN model we will be using to perform Sentiment Analysis.
-    """
-
-    def __init__(self, embedding_dim, hidden_dim, vocab_size):
-        """
-        Initialize the model by settingg up the various layers.
-        """
-        super(LSTMClassifier, self).__init__()
-
-        self.embedding = nn.Embedding(vocab_size, embedding_dim, padding_idx=0)
-        self.lstm = nn.LSTM(embedding_dim, hidden_dim)
-        self.dense = nn.Linear(in_features=hidden_dim, out_features=1)
-        self.sig = nn.Sigmoid()
+class RNN(nn.Module):
+    def __init__(self, input_size, output_size, hidden_dim, n_layers):
+        super(RNN, self).__init__()
         
-        self.word_dict = None
+        self.hidden_dim = hidden_dim
+        self.n_layers = n_layers
 
-    def forward(self, x):
-        """
-        Perform a forward pass of our model on some input.
-        """
-        x = x.t()
-        lengths = x[0,:]
-        reviews = x[1:,:]
-        embeds = self.embedding(reviews)
-        lstm_out, _ = self.lstm(embeds)
-        out = self.dense(lstm_out)
-        out = out[lengths - 1, range(len(lengths))]
-        return self.sig(out.squeeze())
+        # define an RNN with specified parameters
+        # batch_first means that the first dim of the input and output will be the batch_size
+        self.rnn = nn.RNN(input_size, hidden_dim, n_layers, batch_first=True)
+        
+        # last, fully-connected layer
+        self.fc = nn.Linear(hidden_dim, output_size)
+        
+        
+    def forward(self, x, hidden):
+        # x (batch_size, seq_length, input_size)
+        # hidden (n_layers, batch_size, hidden_dim)
+        # r_out (batch_size, time_step, hidden_size)
+        batch_size = x.size(0)
+        
+        # get RNN outputs
+        r_out, hidden_out = self.rnn(x, hidden)
+        
+        # shape output to be (batch_size*seq_length, hidden_dim)
+        r_out = r_out.view(-1, self.hidden_dim)  
+        
+        # get final output 
+        output = self.fc(r_out)
+        # get last batch
+        output = output[:, -1]
+        
+        return output, hidden

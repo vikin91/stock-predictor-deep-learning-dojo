@@ -9,7 +9,7 @@ import torch
 import torch.optim as optim
 import torch.utils.data
 
-from model import RNN
+from model import LSTMClassifier
 
 def model_fn(model_dir):
     """Load the PyTorch model from the `model_dir` directory."""
@@ -32,6 +32,11 @@ def model_fn(model_dir):
     with open(model_path, 'rb') as f:
         model.load_state_dict(torch.load(f))
 
+    # Load the saved word_dict.
+    word_dict_path = os.path.join(model_dir, 'word_dict.pkl')
+    with open(word_dict_path, 'rb') as f:
+        model.word_dict = pickle.load(f)
+
     model.to(device).eval()
 
     print("Done loading model.")
@@ -41,48 +46,55 @@ def _get_train_data_loader(batch_size, training_dir):
     print("Get train data loader.")
 
     train_data = pd.read_csv(os.path.join(training_dir, "train.csv"), header=None, names=None)
-    # Turn the input pandas dataframe into tensors
-    # For Y, we select 3rd column - average price next day
-    # For X, we select all but first 3 columns - all data for the current day
-    train_y = torch.from_numpy(train_data[[2]].values).float().squeeze()
-    train_X = torch.from_numpy(train_data.drop([0,1,2], axis=1).values).float()
+
+    train_y = torch.from_numpy(train_data[[0]].values).float().squeeze()
+    train_X = torch.from_numpy(train_data.drop([0], axis=1).values).long()
 
     train_ds = torch.utils.data.TensorDataset(train_X, train_y)
 
     return torch.utils.data.DataLoader(train_ds, batch_size=batch_size)
 
 
+def train(model, train_loader, epochs, optimizer, loss_fn, device):
+    """
+    This is the training method that is called by the PyTorch training script. The parameters
+    passed are as follows:
+    model        - The PyTorch model that we wish to train.
+    train_loader - The PyTorch DataLoader that should be used during training.
+    epochs       - The total number of epochs to train for.
+    optimizer    - The optimizer to use during training.
+    loss_fn      - The loss function used for training.
+    device       - Where the model and data should be loaded (gpu or cpu).
+    """
+        
+    # for dev
+    print_every = 5
+    batch_size=50
+    clip=5 # gradient clipping
+    criterion = loss_fn
 
-def train(model, train_loader, epochs, optimizer, criterion, device):
-    
-    # initialize the hidden state
-    hidden = None
-    
     for epoch in range(1, epochs + 1):
         model.train()
         total_loss = 0
-        
-        
         for batch in train_loader:
-            batch_X, batch_y = batch            
+            batch_X, batch_y = batch
+            
             batch_X = batch_X.to(device)
             batch_y = batch_y.to(device)
             
-            # convert data into Tensors
-            # x_tensor = torch.Tensor(x).unsqueeze(0) # unsqueeze gives a 1, batch_size dimension
-            # y_tensor = torch.Tensor(y)
-            x_tensor = torch.Tensor(batch_X).unsqueeze(0)
+            # TODO: Complete this train method to train the model provided.            
             
+            # Creating new variables for the hidden state, otherwise
+            # we'd backprop through the entire training history
+            # h = tuple([each.data for each in h])
             model.zero_grad()
-            output, hidden = model(x_tensor, hidden)
-            
+            output = model(batch_X)
             loss = criterion(output.squeeze(), batch_y.float())
-            loss.backward(retain_graph=True)
-            optimizer.step()
-            
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
+            optimizer.step() 
             total_loss += loss.data.item()
-        print("Epoch: {}, MSELoss: {}".format(epoch, total_loss / len(train_loader)))
-    return model
+        print("Epoch: {}, BCELoss: {}".format(epoch, total_loss / len(train_loader)))
 
 
 if __name__ == '__main__':
@@ -149,6 +161,11 @@ if __name__ == '__main__':
             'vocab_size': args.vocab_size,
         }
         torch.save(model_info, f)
+
+	# Save the word_dict
+    word_dict_path = os.path.join(args.model_dir, 'word_dict.pkl')
+    with open(word_dict_path, 'wb') as f:
+        pickle.dump(model.word_dict, f)
 
 	# Save the model parameters
     model_path = os.path.join(args.model_dir, 'model.pth')
