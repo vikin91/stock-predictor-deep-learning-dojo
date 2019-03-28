@@ -6,6 +6,7 @@ import sys
 import sagemaker_containers
 import pandas as pd
 import torch
+import torch.nn as nn
 import torch.optim as optim
 import torch.utils.data
 
@@ -57,7 +58,7 @@ def _get_train_data_loader(batch_size, training_dir):
     return torch.utils.data.DataLoader(train_ds, batch_size=batch_size)
 
 
-def train(model, train_loader, epochs, optimizer, loss_fn, device):
+def train(model, train_loader, epochs, optimizer, criterion, device):
     """
     This is the training method that is called by the PyTorch training script. The parameters
     passed are as follows:
@@ -70,10 +71,7 @@ def train(model, train_loader, epochs, optimizer, loss_fn, device):
     """
         
     # for dev
-    print_every = 5
-    batch_size=50
     clip=5 # gradient clipping
-    criterion = loss_fn
 
     for epoch in range(1, epochs + 1):
         model.train()
@@ -81,18 +79,18 @@ def train(model, train_loader, epochs, optimizer, loss_fn, device):
         for batch in train_loader:
             batch_X, batch_y = batch
             
-            # convert data into Tensors
-            x_tensor = torch.Tensor(batch_X).unsqueeze(0)
-            y_tensor = torch.Tensor(batch_y)
-          
-            x_tensor = x_tensor.to(device)
-            y_tensor = y_tensor.to(device)
+            # convert data into Tensors and move to GPU if available
+            # x_tensor = torch.FloatTensor(batch_X).unsqueeze(0).to(device)
+            # y_tensor = torch.FloatTensor(batch_y).to(device)
+            
+            batch_X = batch_X.to(device)
+            batch_y = batch_y.to(device)
             
             model.zero_grad()
             
-            output = model(x_tensor)
-           
-            loss = criterion(output.squeeze(), y_tensor)
+            output = model(batch_X)
+            loss = criterion(output.squeeze(), batch_y)
+            
             loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), clip)
             optimizer.step()   
