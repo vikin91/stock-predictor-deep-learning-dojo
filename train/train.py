@@ -26,7 +26,7 @@ def model_fn(model_dir):
 
     # Determine the device and construct the model.
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = LSTM(input_dim=2, 
+    model = LSTM(input_dim=1,
              hidden_dim=model_info['hidden_dim'], 
              batch_size=model_info['batch_size'],
              output_dim=1, 
@@ -139,7 +139,7 @@ if __name__ == '__main__':
     train_loader = _get_train_data_loader(args.batch_size, args.data_dir)
 
     # Build the model.
-    model = LSTM(input_dim=2, 
+    model = LSTM(input_dim=1, 
                  hidden_dim=args.hidden_dim, 
                  batch_size=args.batch_size,
                  output_dim=1, 
