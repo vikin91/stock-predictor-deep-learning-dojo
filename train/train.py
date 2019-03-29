@@ -9,6 +9,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.utils.data
+from sklearn.metrics import *
 
 from model import LSTM
 
@@ -43,22 +44,34 @@ def model_fn(model_dir):
     print("Done loading model.")
     return model
 
+def _get_test_data_loader(batch_size, training_dir):
+    print("Getting test data loader.")
+       
+    dummy_read = pd.read_csv(os.path.join(training_dir, 'test.csv'), header=None, names=None)
+    num_rows_test = (len(dummy_read) // batch_size) * batch_size
+    test_data = pd.read_csv(os.path.join(training_dir, 'test.csv'), header=None, names=None, nrows=num_rows_test)
+
+    test_y = torch.from_numpy(test_data[[0]].values).float().squeeze()
+    test_X = torch.from_numpy(test_data.drop([0], axis=1).values).float()
+
+    test_ds = torch.utils.data.TensorDataset(test_X, test_y)
+    return torch.utils.data.DataLoader(test_ds, batch_size=batch_size)
+
 def _get_train_data_loader(batch_size, training_dir):
-    print("Get train data loader.")
+    print("Getting train data loader.")
        
     dummy_read = pd.read_csv(os.path.join(training_dir, 'train.csv'), header=None, names=None)
     num_rows_train = (len(dummy_read) // batch_size) * batch_size
     train_data = pd.read_csv(os.path.join(training_dir, 'train.csv'), header=None, names=None, nrows=num_rows_train)
 
     train_y = torch.from_numpy(train_data[[0]].values).float().squeeze()
-    train_X = torch.from_numpy(train_data.drop([0], axis=1).values).long()
+    train_X = torch.from_numpy(train_data.drop([0], axis=1).values).float()
 
     train_ds = torch.utils.data.TensorDataset(train_X, train_y)
-
     return torch.utils.data.DataLoader(train_ds, batch_size=batch_size)
 
 
-def train(model, train_loader, epochs, optimizer, criterion, device):
+def train(model, loader, epochs, optimizer, criterion, device):
     """
     This is the training method that is called by the PyTorch training script. The parameters
     passed are as follows:
@@ -72,32 +85,95 @@ def train(model, train_loader, epochs, optimizer, criterion, device):
         
     # for dev
     clip=5 # gradient clipping
-
+    model.train()
+    
     for epoch in range(1, epochs + 1):
-        model.train()
         total_loss = 0
-        for batch in train_loader:
+        total_rmse = 0
+        total_r2_score = 0
+        
+        for batch in loader:
             batch_X, batch_y = batch
-            
-            # convert data into Tensors and move to GPU if available
-            # x_tensor = torch.FloatTensor(batch_X).unsqueeze(0).to(device)
-            # y_tensor = torch.FloatTensor(batch_y).to(device)
-            
+
             batch_X = batch_X.to(device)
             batch_y = batch_y.to(device)
             
             model.zero_grad()
             
             output = model(batch_X)
+            
+            # Calculate errors
             loss = criterion(output.squeeze(), batch_y)
             
+            # flat_out = output.cpu().detach().numpy().reshape(-1,1)              
+            # flat_y = batch_y.cpu().detach().numpy()
+            # total_rmse += mean_squared_error(flat_y, flat_out)
+            # total_r2_score += r2_score(flat_y, flat_out)
+            
+            # Learn the model
             loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), clip)
             optimizer.step()   
             
             total_loss += loss.data.item()
-        print("Epoch: {}, MSELoss: {}".format(epoch, total_loss / len(train_loader)))
+        print("Epoch: {} train:mseloss: {}".format(epoch, total_loss / len(loader)))
+        # print("train:r2_score: {}".format(total_r2_score))
+        # print("train:rmse: {}".format(total_rmse))
 
+def test(model, test_loader, criterion, device):
+    model.eval()
+    total_loss = 0
+
+    for batch in test_loader:
+        batch_X, batch_y = batch
+        batch_X = batch_X.to(device)
+        batch_y = batch_y.to(device)            
+
+        output = model(batch_X)
+        loss = criterion(output.squeeze(), batch_y)
+        
+        # Calculate errors
+        
+        rmse_x = output.cpu().detach().numpy().reshape(-1,1)
+        rmse_y = batch_y.cpu().detach().numpy()
+        total_rmse += mean_squared_error(rmse_y, rmse_x)
+        total_loss += loss.data.item()
+        
+    print("test:mseloss: {}".format(total_loss / len(test_loader)))
+    print("test:rmse: {}".format(total_rmse))
+
+
+def save_model(model, model_dir):
+    
+    # Save the parameters used to construct the model
+    model_info_path = os.path.join(model_dir, 'model_info.pth')
+    with open(model_info_path, 'wb') as f:
+        model_info = {
+            'hidden_dim': args.hidden_dim,
+            'batch_size': args.batch_size,
+            'num_layers': args.num_layers,
+        }
+        torch.save(model_info, f)
+
+    # Save the model
+    model_path = os.path.join(model_dir, 'model.pth')
+    with open(model_path, 'wb') as f:
+        torch.save(model.cpu().state_dict(), f)
+
+def run_training(model, data_dir, args):
+    # Train the model.
+    optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
+    loss_fn = torch.nn.MSELoss()
+    train_loader = _get_train_data_loader(args.batch_size, data_dir)
+    train(model, train_loader, args.epochs, optimizer, loss_fn, device)
+    save_model(model, args.model_dir)
+    
+def run_testing(model, data_dir, args):
+    # Train the model.
+    loss_fn = torch.nn.MSELoss()
+    test_loader = _get_test_data_loader(args.batch_size, data_dir)
+    test(model, test_loader, optimizer, loss_fn, device)
+    save_model(model, args.model_dir)
 
 if __name__ == '__main__':
     # All of the model parameters and training parameters are sent as arguments when the script
@@ -134,10 +210,7 @@ if __name__ == '__main__':
     print("Using device {}.".format(device))
 
     torch.manual_seed(args.seed)
-
-    # Load the training data.
-    train_loader = _get_train_data_loader(args.batch_size, args.data_dir)
-
+    
     # Build the model.
     model = LSTM(input_dim=1, 
                  hidden_dim=args.hidden_dim, 
@@ -149,23 +222,9 @@ if __name__ == '__main__':
         args.hidden_dim, args.batch_size, args.num_layers
     ))
 
-    # Train the model.
-    optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
-    loss_fn = torch.nn.MSELoss()
+    run_training(model, args.data_dir, args)
 
-    train(model, train_loader, args.epochs, optimizer, loss_fn, device)
+        
 
-    # Save the parameters used to construct the model
-    model_info_path = os.path.join(args.model_dir, 'model_info.pth')
-    with open(model_info_path, 'wb') as f:
-        model_info = {
-            'hidden_dim': args.hidden_dim,
-            'batch_size': args.batch_size,
-            'num_layers': args.num_layers,
-        }
-        torch.save(model_info, f)
 
-	# Save the model parameters
-    model_path = os.path.join(args.model_dir, 'model.pth')
-    with open(model_path, 'wb') as f:
-        torch.save(model.cpu().state_dict(), f)
+

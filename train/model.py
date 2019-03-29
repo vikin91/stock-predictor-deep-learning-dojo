@@ -29,6 +29,5 @@ class LSTM(nn.Module):
         lstm_input = input_X.view(1, self.batch_size, self.input_dim)
         lstm_out, _ = self.lstm(lstm_input.float())
         out = self.linear(lstm_out)
-        result1 = out
         
-        return result1
+        return out
