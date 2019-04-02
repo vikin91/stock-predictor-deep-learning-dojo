@@ -105,11 +105,6 @@ def train(model, loader, epochs, optimizer, criterion, device):
             # Calculate errors
             loss = criterion(output.squeeze(), batch_y)
             
-            # flat_out = output.cpu().detach().numpy().reshape(-1,1)              
-            # flat_y = batch_y.cpu().detach().numpy()
-            # total_rmse += mean_squared_error(flat_y, flat_out)
-            # total_r2_score += r2_score(flat_y, flat_out)
-            
             # Learn the model
             loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), clip)
@@ -117,8 +112,6 @@ def train(model, loader, epochs, optimizer, criterion, device):
             
             total_loss += loss.data.item()
         print("Epoch: {} train:mseloss: {}".format(epoch, total_loss / len(loader)))
-        # print("train:r2_score: {}".format(total_r2_score))
-        # print("train:rmse: {}".format(total_rmse))
 
 def test(model, test_loader, criterion, device):
     model.eval()
@@ -169,11 +162,12 @@ def run_training(model, data_dir, args):
     save_model(model, args.model_dir)
     
 def run_testing(model, data_dir, args):
-    # Train the model.
+    # Test the model.
+    optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
     loss_fn = torch.nn.MSELoss()
     test_loader = _get_test_data_loader(args.batch_size, data_dir)
+    
     test(model, test_loader, optimizer, loss_fn, device)
-    save_model(model, args.model_dir)
 
 if __name__ == '__main__':
     # All of the model parameters and training parameters are sent as arguments when the script
