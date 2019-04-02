@@ -29,7 +29,7 @@ The notebook shall not be shared an thus must have unique name.
 
 ### Step 5: Select GitHub Repository with Code
 
-Select Git repo. You may use branch `master` or `dev`.
+Select Git repo. Use appropriate branch (default: `master`).
 
 ![SageMaker Notebooks](images/aws3.png)
 
@@ -41,7 +41,7 @@ Click "Open Jupyter" next to your notebook instance.
 
 ### Step 7: Open Jupyter Notebook
 
-Navigate to folder `stock-predictor-rnn-dojo` and open `workbook-deep-learning.ipynb`.
+Open notebook from file `workbook-deep-learning.ipynb`.
 Follow the instructions included in the workbook.
 
 ## Cleanup
